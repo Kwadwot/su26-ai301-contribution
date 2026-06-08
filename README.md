@@ -1,15 +1,20 @@
-# Contribution [#]: [Issue Title]
+# Contribution 1: Add compatibility test for $percentile
 
-**Contribution Number:** [1 / 2 / 3]  
-**Student:** [Your Name]  
-**Issue:** [GitHub issue link]  
-**Status:** [Phase I / Phase II / Phase III / Phase IV] [In Progress / Complete]
+**Contribution Number:** 1  
+**Student:** Kwadwo Twumasi  
+**Issue:** [Add compatibility test for $percentile (second pass)
+ #195](https://github.com/documentdb/functional-tests/issues/195)  
+**Status:** Phase I Complete
 
 ---
 
 ## Why I Chose This Issue
 
-[1-2 paragraphs explaining why this issue interests you, how it matches your skills/learning goals, what you hope to learn]
+I chose this issue because it aligns with my recent studies in the Python programming language, specifically when it
+comes to writing tests of functions. In this case, I would be implementing and testing a Python compatibility test for this 
+DocumentDB project's $percentile accumulator expression operator. This issue matches my skills since I have experience as a
+Python programmer and working with a database (PostgreSQL and Supabase). I also chose this issue because I want to learn a bit 
+about MongoDB as I work toward this contribution.
 
 ---
 
