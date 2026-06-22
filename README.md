@@ -155,11 +155,11 @@ Using UMPIRE framework (adapted):
 **Implement:** WIP
 
 **Review:** Self-review checklist (per `CONTRIBUTING.md`):
-- [ ] Each test has a required operation marker and a clear docstring
-- [ ] One behavior per test; assertions via framework helpers (no bare `assert`)
-- [ ] Error codes imported from `error_codes.py`, not hardcoded
-- [ ] `black .` / `isort .` clean; `pre-commit run --all-files` passes
-- [ ] Expected values verified against real MongoDB 7.0+
+- [x] Each test has a required operation marker and a clear docstring
+- [x] One behavior per test; assertions via framework helpers (no bare `assert`)
+- [x] Error codes imported from `error_codes.py`, not hardcoded
+- [x] `black .` / `isort .` clean; `pre-commit run --all-files` passes
+- [x] Expected values verified against real MongoDB 7.0+
 
 **Evaluate:** Run the targeted suite against a local MongoDB 7.0+ instance and confirm all
 cases pass.
@@ -168,38 +168,91 @@ cases pass.
 
 ## Testing Strategy
 
-### Unit Tests
+> Note: This contribution *adds* compatibility tests, so the deliverable is the test
+> suite itself. The categories below describe the coverage added rather than tests
+> written against new product code. All cases run against a live MongoDB instance via
+> the framework's `execute_expression` helpers.
 
-- [ ] Test case 1: [Description]
-- [ ] Test case 2: [Description]
-- [ ] Test case 3: [Description]
+### Test Coverage Added (`$percentile` expression operator)
 
-### Integration Tests
+Located in `documentdb_tests/compatibility/tests/core/operator/expressions/accumulator/percentile/`,
+split by aspect (mirroring the `$avg` sibling). **49 cases total**, all passing.
 
-- [ ] Integration scenario 1
-- [ ] Integration scenario 2
+- [x] **Core selection & ordering** (`test_percentile_core.py`): median, p=0 (min), p=1 (max),
+      single-element, unsorted input, all-equal, large (10k) input, multiple/descending/duplicate p,
+      `[0.0, 1.0]` boundaries.
+- [x] **Input forms** (`test_percentile_input_forms.py`): `$literal` array, raw array, scalar,
+      expression operator (`$concatArrays`), field reference, dotted path, empty array → `[null]`.
+- [x] **Numeric types & special values** (`test_percentile_data_types.py`): int32/int64/double/
+      Decimal128, mixed types, return-type-is-double, NaN/±Infinity ordering in input.
+- [x] **Non-numeric handling** (`test_percentile_non_numeric.py`): non-numeric ignored;
+      all-non-numeric and all-null → `[null]`.
+- [x] **Null/missing input** (`test_percentile_null.py`): null and missing field → `[null]`
+      (incl. one null per requested p).
+- [x] **`p` validation** (`test_percentile_p_validation.py`): out-of-range, scalar/empty/non-numeric
+      `p`, and valid `0.0`/`1.0` boundaries, asserting the documented error codes.
+- [x] **`method` & spec validation** (`test_percentile_method.py`): unsupported/invalid/wrong-type
+      method, missing/unknown spec fields, non-object spec.
+
+### Cross-Suite Verification
+
+- [x] Full percentile folder (new files + untouched smoke test): **49 passed**.
+- [x] Regression on the reference sibling `$avg` suite: **224 passed** (no breakage from the
+      shared `error_codes.py` additions).
+- [x] Lint/type gates: `isort`, `flake8`, `mypy` clean. (`black` runs in CI, but local run is blocked
+      by a known Python 3.12.5 AST-checker bug, not a formatting issue.)
+
 
 ### Manual Testing
 
-[What you tested manually and results]
+Expected values and error codes were **captured empirically** against a local MongoDB 8.3.4 instance
+(rather than assumed), via a throwaway probe script exercising every planned case. Two behaviors
+surfaced that shaped the suite:
+
+- `method: "discrete"` / `"continuous"` are **not supported** on 8.3.4 — only `"approximate"`
+  (others return `BadValue`). Asserted as error cases.
+- Passing **`NaN` as a `p` value crashed the `mongod` process** — excluded from the suite (a
+  server-crashing test shouldn't ship) and flagged as a likely upstream robustness bug.
 
 ---
 
 ## Implementation Notes
 
-### Week [X] Progress
+### Week 3 Progress
 
-[What you built this week, challenges faced, decisions made]
-
-### Week [Y] Progress
-
-[Continue documenting as you work]
+- **Environment:** Settled on a local MongoDB 8.3.4 instance (`mongodb://localhost:27017`).
+  MongoDB Atlas free tier was ruled out — its 38-byte database-name cap conflicts with the
+  framework's auto-generated per-test DB names.
+- **First pass:** Implemented `$percentile` expression coverage as a single file using
+  `StageTestCase` + raw `execute_command`. 18 cases, green.
+- **Review against project conventions** (`TEST_FORMAT.md`, `TEST_COVERAGE.md`, `FOLDER_STRUCTURE.md`
+  and the `$avg` reference) revealed structural divergences → refactored.
+- **Refactor:** Moved to the idiomatic shape — a `PercentileTest(BaseTestCase)` dataclass + a
+  `percentile_spec()` builder in a local `utils/`, the shared `execute_expression*` helpers, and
+  `assert_expression_result`. Split into 7 aspect files and expanded coverage to 49 cases.
+- **Captured all expected values** from the live server; resolved two new server error codes.
 
 ### Code Changes
 
-- **Files modified:** [List]
-- **Key commits:** [Links to important commits]
-- **Approach decisions:** [Why you chose certain approaches]
+- **Files added:**
+  - `expressions/accumulator/percentile/utils/percentile_common.py` — `PercentileTest`, `percentile_spec()`
+  - `test_percentile_core.py`, `test_percentile_input_forms.py`, `test_percentile_data_types.py`,
+    `test_percentile_non_numeric.py`, `test_percentile_null.py`, `test_percentile_p_validation.py`,
+    `test_percentile_method.py`
+- **Files modified:**
+  - `documentdb_tests/framework/error_codes.py`: added `PERCENTILE_INVALID_P_TYPE_ERROR = 7750302`
+    and `PERCENTILE_SPEC_NOT_OBJECT_ERROR = 7436200` (both sorted; both confirmed against server output).
+- **Files removed:**
+  - `test_expression_percentile.py`: superseded by the aspect-split files.
+- **Key commits:** [Commit 0a1ed4b](https://github.com/Kwadwot/functional-tests/commit/0a1ed4b7d91e7ce002a0ec0625455458bbc19cbd)
+- **Approach decisions:**
+  - *Followed the `$avg` pattern exactly* (dataclass + shared helpers + aspect-split files) so the
+    suite reads like its siblings and reviewers can pattern-match it.
+  - *Captured expected values empirically* instead of hand-deriving them — appropriate for a
+    compatibility suite, and it caught the t-digest rank behavior and the always-double return type.
+  - *Scoped to the expression form only.* Pipeline-context wiring (§11) and the accumulator form are
+    noted as out of scope / follow-ups.
+  - *Added error-code constants rather than hardcoding* the two new codes, per `TEST_FORMAT.md`.
 
 ---
 
