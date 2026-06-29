@@ -4,7 +4,7 @@
 **Student:** Kwadwo Twumasi  
 **Issue:** [Add compatibility test for $percentile (second pass)
  #195](https://github.com/documentdb/functional-tests/issues/195)  
-**Status:** Phase II Complete
+**Status:** Phase IV Complete
 
 ---
 
@@ -258,15 +258,49 @@ surfaced that shaped the suite:
 
 ## Pull Request
 
-**PR Link:** [GitHub PR URL when submitted]
+**PR Link:** [GitHub PR URL when submitted](https://github.com/documentdb/functional-tests/pull/655)
 
-**PR Description:** [Draft or final PR description - much of the content above can be adapted]
+**PR Description:**
+### What does this PR do?
+
+Adds comprehensive compatibility tests for the `$percentile` aggregation **expression** operator (used inside `$project`/`$set`/`$addFields`), which previously had only a single happy-path smoke test. The new tests live under `expressions/accumulator/percentile/` and follow the `$avg` sibling pattern: a `PercentileTest(BaseTestCase)` dataclass plus a `percentile_spec()` builder in `utils/`, the shared `execute_expression` helpers, and `assert_expression_result`. Coverage is split by aspect across 7 files (49 cases): core selection and `p` ordering, input forms, numeric types and special values, non-numeric handling, null/missing input, `p` validation, and `method`/spec validation. Two error-code constants used by the tests are added to `framework/error_codes.py`: `PERCENTILE_INVALID_P_TYPE_ERROR` (7750302) and `PERCENTILE_SPEC_NOT_OBJECT_ERROR` (7436200).
+
+### Why was this PR needed?
+
+`$percentile` is a tracked feature in the taxonomy (`docs/feature-tree.csv`) but had only smoke-level coverage. Characterizing its behavior against a live server surfaced specifics worth pinning down: under `method: "approximate"` it returns an order statistic at rank ceil(p·n) and always returns `double` (even for Decimal128 input); non-numeric/null/missing inputs yield `[null]`; and malformed `p`/`method`/spec values map to distinct error codes. Two findings emerged during investigation (captured on MongoDB 8.3.4): `method: "discrete"` and `"continuous"` are **not supported** (only `"approximate"`, others return `BadValue`), and passing **`NaN` as a `p` value crashed the `mongod` process** — that case was deliberately excluded from the suite as a likely upstream robustness bug.
+
+### What are the relevant issue numbers?
+
+Closes #195
+
+### How to test it (on a MongoDB instance) + Screenshot:
+
+Test run against MongoDB 8.3.4:
+``` shell
+pytest documentdb_tests/compatibility/tests/core/operator/expressions/accumulator/percentile/ --connection-string mongodb://localhost:27017 --engine-name mongodb -q
+```
+49 passed in 1.18s
+#### Tests success screenshot:
+<img width="988" height="312" alt="image" src="https://github.com/user-attachments/assets/f344293d-0a86-478f-8fd3-82719b87bd03" />
+
+
+
+Regression check on the reference sibling suite (`$avg`): `224 passed`.
+
+### Does this PR meet the acceptance criteria?
+
+- [x] Tests added for new/changed behavior — 49 cases across 7 files
+- [x] All tests passing — 49 passed; `$avg` regression 224 passed; isort/flake8/mypy clean
+- [x] Follows project style guide — mirrors the `$avg` pattern per `TEST_FORMAT.md` / `TEST_COVERAGE.md` / `FOLDER_STRUCTURE.md`
+- [x] No breaking changes introduced — additive only (new tests + two sorted error-code constants)
+- [x] Documentation updated (if applicable) — n/a (test-only contribution; no user-facing docs affected)
+
 
 **Maintainer Feedback:**
 - [Date]: [Summary of feedback received]
 - [Date]: [How you addressed it]
 
-**Status:** [Awaiting review / Iterating / Approved / Merged]
+**Status:** Awaiting review
 
 ---
 
